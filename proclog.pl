@@ -16,9 +16,10 @@ sub usage()
     usage: $0 [-h] [-i in] [-o out]
 
      -h        : this (help) message
-     -o out   : out file containing process result
+     -i in     : in file containing raw data
+     -o out    : out file containing process result
 
-    example: $0 in -o out";
+    example: $0 -i in -o out";
 
     exit 1;
 }
@@ -62,8 +63,9 @@ sub cut_log($; $; @) {
                     $worksheet = $workbook->add_worksheet();
                     $format = $workbook->add_format();
                     $format->set_align( 'center' );
+
+                	$start = 1;
                 }
-                $start = 1;
                 
                 print DATA_FILE "$line\n";
                 
@@ -157,6 +159,7 @@ my ($spoint, $epoint) = (1540, 1890);
 my $dir;
 # split the file and return the directory
 $dir = cut_log($spoint, $epoint, @lines);
+untie(@lines);
 
 my @files= glob "$dir/data*.txt";
 
