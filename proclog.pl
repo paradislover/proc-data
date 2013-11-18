@@ -6,7 +6,6 @@ use Tie::File;
 use File::Path qw( make_path );
 use Getopt::Std;
 
-use Excel::Writer::XLSX;
 
 # script usage
 sub usage()
@@ -27,12 +26,12 @@ sub usage()
 # split the log file with given features
 # argv[0] start point
 # argv[1] end point
-# argv[2] array of whole log file
+# argv[2] raw data file handler
 # return the directory of all aplite sub log
-sub cut_log($; $; @) {
+sub cut_log($; $; $) {
     my $spoint = shift @_;
     my $epoint = shift @_;
-    my @lines = @_;
+    *FH_LOG = shift @_;
 
     my $dir = "log";
     
@@ -44,25 +43,20 @@ sub cut_log($; $; @) {
     
     my $start = 0;
     my $count = 1;
-    my $workbook;
-    my $worksheet;
-    my $format;
-    my $row = 0;
-    my $col = 0;
-    foreach my $line (@lines) {
+   	while (my $line = <FH_LOG>) {
+		chomp($line);
         if ($line =~ /^\d+/) {
             my @data = split / /, $line;
             if ($data[0] eq $spoint || $start eq 1) {
                 if ($start eq 0) {
                     my $suffix = sprintf("%02d", $count);
-                    my $file = $dir."/"."data".$suffix.".txt";
-                    open(DATA_FILE, ">", $file)
-                        or die "can't open $file $!";
+                    my $data_file = $dir."/"."data".$suffix.".txt";
+                    open(DATA_FILE, ">", $data_file)
+                        or die "can't open $data_file $!";
                     
-                    $workbook = Excel::Writer::XLSX->new( $file.'.xlsx' );
-                    $worksheet = $workbook->add_worksheet();
-                    $format = $workbook->add_format();
-                    $format->set_align( 'center' );
+                    my $csv_file = $dir."/"."data".$suffix.".csv";
+                    open(CSV_FILE, ">", $csv_file)
+                        or die "can't open $csv_file $!";
 
                 	$start = 1;
                 }
@@ -70,17 +64,14 @@ sub cut_log($; $; @) {
                 print DATA_FILE "$line\n";
                 
                 foreach(@data) {
-                    $worksheet->write( $row, $col, $_, $format);
-                    $col += 1;
+					print CSV_FILE "$_,";
                 }
-                $col = 0;
-                $row += 1;
+				print CSV_FILE "\n";
                 if ($data[0] eq $epoint) {
                     $start = 0;
                     $count += 1;
-                    $row = 0;
                     close(DATA_FILE);
-                    $workbook->close();
+                    close(CSV_FILE);
                 }
             }
         }
@@ -112,12 +103,13 @@ sub proc_data($; $) {
     close(DATA_FILE);
     
     my @file = split /\//, $filename; 
+    printf "%-10s\t\t%-10f\n", $file[1], $maxval;
     printf TO "%-10s\t\t%-10f\n", $file[1], $maxval;
 }
 
 
 # dos2unix : perl -i -pne 's/\r\n/\n/g' log
-# unix2dos : perl -i -pne 's/\n/\n\r/g' log
+# unix2dos : perl -i -pne 's/\n/\r\n/g' log
 
 # install Excel::Writer::XLSX
 # For windows
@@ -134,44 +126,47 @@ usage() if $opts{'h'};
 my $in = $opts{'i'};
 my $out = $opts{'o'};
 
-if ($out) {
-    open(FH, '>', $out) or die "Can't open $out $!";
-} else {
-    open(FH, '>&', \*STDOUT) or die "Can't redirect FH to STDOUT $!";
-}
-
-my $logfile;
+my $raw;
 if (!$in) {
-    $logfile = "APQ044W0000_F1_rejects_25C.prm";
+    $raw = "APQ044W0000_F1_rejects_25C.prm";
 } else {
-    $logfile = $in;
+    $raw = $in;
 }
+open(RAW_FH, '<', $raw) or die "Can't open $raw $!";
+
+my $log;
+if (!$out) {
+	$log = "result.txt";
+} else {
+	$log = $out;
+}
+open(LOG_FH, '>', $log) or die "Can't open $log $!";
 
 print "\nprocess......\n";
-
-my @lines;
-tie(@lines,'Tie::File',$logfile) or die "Can't open $logfile";
-
 
 # define the start and end point to cut file
 my ($spoint, $epoint) = (1540, 1890);
 
 my $dir;
 # split the file and return the directory
-$dir = cut_log($spoint, $epoint, @lines);
-untie(@lines);
+$dir = cut_log($spoint, $epoint, \*RAW_FH);
 
 my @files= glob "$dir/data*.txt";
 
-print  FH '-'x32, "\n";
-printf FH "%-10s\t\t%-10s\n", "log/name", "max/val";
-print  FH '-'x32, "\n";
+print  '-'x32, "\n";
+printf "%-10s\t\t%-10s\n", "log/name", "max/val";
+print  '-'x32, "\n";
+print  LOG_FH '-'x32, "\n";
+printf LOG_FH "%-10s\t\t%-10s\n", "log/name", "max/val";
+print  LOG_FH '-'x32, "\n";
 foreach my $file (@files) {
-    proc_data($file, \*FH);
+    proc_data($file, \*LOG_FH);
 }
-print FH '-'x32, "\n";
+print '-'x32, "\n";
+print LOG_FH '-'x32, "\n";
 
-close(FH);
+close(RAW_FH);
+close(LOG_FH);
 
 print "\nfinished!\n";
 print "press ENTER to exit";
