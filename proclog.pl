@@ -18,7 +18,7 @@ sub usage()
      -i in     : in file containing raw data
      -o out    : out file containing process result
 
-    example: $0 -i in -o out";
+    example: $0 -i in -o out\n";
 
     exit 1;
 }
